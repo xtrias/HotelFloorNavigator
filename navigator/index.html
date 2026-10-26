@@ -11,9 +11,8 @@
   #plan { display: block; }
   #overlay { position: absolute; top: 0; left: 0; }
   polygon { stroke: #333; stroke-width: 1.5; cursor: pointer; }
-  .status-available { opacity: 0.7; }
-  .status-occupied { opacity: 0.85; }
   .room-label { font-size: 12px; font-weight: bold; pointer-events: none; fill: #111; }
+  .status-overlay text { font-size: 11px; font-weight: 600; fill: #222; pointer-events: none; }
   .modal { position: fixed; top: 15%; left: 50%; transform: translateX(-50%); background: white; padding: 16px; border: 1px solid #999; box-shadow: 0 4px 20px rgba(0,0,0,0.25); z-index: 20; min-width: 300px; }
   .zoom-controls button { width: auto; margin-right: 6px; }
   button, input, select, textarea { margin: 4px 0; width: 100%; box-sizing: border-box; }
@@ -37,6 +36,7 @@
   <div id="stats"></div>
   <hr>
   <button onclick="location.href='../editor/'">Open Editor</button>
+  <button onclick="location.href='../config/'">Configure statuses & types</button>
 </div>
 <div id="canvas-wrap">
   <div id="viewport">
@@ -134,40 +134,75 @@ function redraw() {
     poly.setAttribute('points', pts);
     poly.style.fill = t.color + '99';
     poly.style.stroke = t.color;
-    poly.classList.add('status-' + (area.status || 'available'));
     poly.onclick = () => openModal(area);
     overlay.appendChild(poly);
 
-    if (area.points.length) {
-      const cx = area.points.reduce((s,p)=>s+p[0],0)/area.points.length * w;
-      const cy = area.points.reduce((s,p)=>s+p[1],0)/area.points.length * h;
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', cx);
-      text.setAttribute('y', cy);
-      text.setAttribute('text-anchor', 'middle');
-      text.setAttribute('class', 'room-label');
-      text.textContent = area.label || area.roomNumber || t.label;
-      overlay.appendChild(text);
+    if (!area.points.length) return;
+    const cx = area.points.reduce((s,p)=>s+p[0],0)/area.points.length * w;
+    const cy = area.points.reduce((s,p)=>s+p[1],0)/area.points.length * h;
+
+    // Room label
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    label.setAttribute('x', cx);
+    label.setAttribute('y', cy - 8);
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('class', 'room-label');
+    label.textContent = area.label || area.roomNumber || t.label;
+    overlay.appendChild(label);
+
+    // Status overlay
+    const sc = getStatusConfig(data, area.status || 'available');
+    const showIcon = sc.mode === 'icon' || sc.mode === 'both';
+    const showText = sc.mode === 'text' || sc.mode === 'both';
+    const iconSize = 22;
+
+    if (showIcon) {
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.setAttribute('transform', `translate(${cx - iconSize/2}, ${cy + 2})`);
+      g.innerHTML = getStatusIconSvg(sc.icon);
+      const svgEl = g.querySelector('svg');
+      if (svgEl) {
+        svgEl.setAttribute('width', iconSize);
+        svgEl.setAttribute('height', iconSize);
+      }
+      overlay.appendChild(g);
+    }
+
+    if (showText && sc.text) {
+      const st = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      st.setAttribute('x', cx);
+      st.setAttribute('y', cy + (showIcon ? iconSize + 14 : 12));
+      st.setAttribute('text-anchor', 'middle');
+      st.setAttribute('class', 'status-overlay');
+      st.textContent = sc.text;
+      overlay.appendChild(st);
     }
   });
 }
 
 function renderLegend() {
-  document.getElementById('legend').innerHTML = '<strong>Types</strong><br>' +
-    data.areaTypes.map(t => `<span style="display:inline-block;width:12px;height:12px;background:${t.color};margin-right:4px"></span>${t.label}<br>`).join('');
+  document.getElementById('legend').innerHTML =
+    '<strong>Types</strong><br>' +
+    data.areaTypes.map(t => `<span style="display:inline-block;width:12px;height:12px;background:${t.color};margin-right:4px"></span>${t.label}<br>`).join('') +
+    '<br><strong>Statuses</strong><br>' +
+    data.statusConfigs.map(s => {
+      const icon = (s.mode === 'icon' || s.mode === 'both') ? `<span style="display:inline-block;width:16px;height:16px;vertical-align:middle">${getStatusIconSvg(s.icon)}</span> ` : '';
+      const txt = (s.mode === 'text' || s.mode === 'both') ? (s.text || s.label) : '';
+      return icon + txt + '<br>';
+    }).join('');
 }
 
 function openModal(area) {
   const modal = document.getElementById('modal');
   const t = getAreaType(data, area.type);
+  const statusOpts = data.statusConfigs.map(s =>
+    `<option value="${s.id}" ${s.id===area.status?'selected':''}>${s.label}</option>`
+  ).join('');
   modal.style.display = 'block';
   modal.innerHTML = `
     <h3>${area.label || area.roomNumber || 'Area'} <small>(${t.label})</small></h3>
     Status:<br>
-    <select id="status-sel">
-      ${['available','occupied','cleaning','maintenance','closed'].map(s =>
-        `<option value="${s}" ${s===area.status?'selected':''}>${s}</option>`).join('')}
-    </select><br>
+    <select id="status-sel">${statusOpts}</select><br>
     Notes: <textarea id="notes">${area.characteristics?.notes||''}</textarea><br>
     <button onclick="saveModal('${area.id}')">Save</button>
     <button onclick="document.getElementById('modal').style.display='none'">Close</button>
@@ -189,14 +224,16 @@ function saveModal(id) {
 function updateStats() {
   if (!currentFloor) return;
   const byType = {};
+  const byStatus = {};
   currentFloor.areas.forEach(a => {
     byType[a.type] = (byType[a.type]||0) + 1;
+    byStatus[a.status || 'available'] = (byStatus[a.status || 'available']||0) + 1;
   });
   document.getElementById('stats').innerHTML =
     `<strong>Total areas: ${currentFloor.areas.length}</strong><br>` +
-    Object.entries(byType).map(([k,v]) => {
-      const t = getAreaType(data, k);
-      return `${t.label}: ${v}`;
+    Object.entries(byStatus).map(([k,v]) => {
+      const sc = getStatusConfig(data, k);
+      return `${sc.label}: ${v}`;
     }).join('<br>');
 }
 
