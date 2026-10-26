@@ -1,0 +1,169 @@
+{
+  "floor": {
+    "number": 1,
+    "areas": [
+      {
+        "id": "r101",
+        "type": "room",
+        "label": "101",
+        "roomNumber": "101",
+        "points": [[0.096, 0.128], [0.184, 0.130], [0.182, 0.234], [0.095, 0.237]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r102",
+        "type": "room",
+        "label": "102",
+        "roomNumber": "102",
+        "points": [[0.098, 0.283], [0.183, 0.284], [0.184, 0.392], [0.096, 0.392]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r103",
+        "type": "room",
+        "label": "103",
+        "roomNumber": "103",
+        "points": [[0.188, 0.130], [0.273, 0.130], [0.273, 0.235], [0.188, 0.234]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r104",
+        "type": "room",
+        "label": "104",
+        "roomNumber": "104",
+        "points": [[0.188, 0.285], [0.273, 0.285], [0.273, 0.393], [0.186, 0.392]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r105",
+        "type": "room",
+        "label": "105",
+        "roomNumber": "105",
+        "points": [[0.278, 0.128], [0.360, 0.130], [0.360, 0.236], [0.278, 0.235]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "toilet1",
+        "type": "toilet",
+        "label": "Toilet",
+        "roomNumber": "",
+        "points": [[0.366, 0.128], [0.461, 0.130], [0.463, 0.237], [0.368, 0.238]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r106",
+        "type": "room",
+        "label": "106",
+        "roomNumber": "106",
+        "points": [[0.278, 0.283], [0.360, 0.284], [0.361, 0.392], [0.277, 0.393]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r107",
+        "type": "room",
+        "label": "107",
+        "roomNumber": "107",
+        "points": [[0.470, 0.128], [0.555, 0.130], [0.556, 0.235], [0.470, 0.236]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r108",
+        "type": "room",
+        "label": "108",
+        "roomNumber": "108",
+        "points": [[0.470, 0.283], [0.555, 0.284], [0.556, 0.393], [0.469, 0.392]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r109",
+        "type": "room",
+        "label": "109",
+        "roomNumber": "109",
+        "points": [[0.504, 0.323], [0.541, 0.320], [0.543, 0.283], [0.662, 0.285], [0.661, 0.393], [0.504, 0.391]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r110",
+        "type": "room",
+        "label": "110",
+        "roomNumber": "110",
+        "points": [[0.560, 0.128], [0.645, 0.130], [0.646, 0.236], [0.560, 0.235]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r111",
+        "type": "room",
+        "label": "111",
+        "roomNumber": "111",
+        "points": [[0.650, 0.128], [0.735, 0.130], [0.736, 0.236], [0.650, 0.235]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r112",
+        "type": "room",
+        "label": "112",
+        "roomNumber": "112",
+        "points": [[0.740, 0.128], [0.825, 0.130], [0.826, 0.236], [0.740, 0.235]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r113",
+        "type": "room",
+        "label": "113",
+        "roomNumber": "113",
+        "points": [[0.830, 0.128], [0.915, 0.130], [0.916, 0.236], [0.830, 0.235]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r201",
+        "type": "room",
+        "label": "201",
+        "roomNumber": "201",
+        "points": [[0.420, 0.420], [0.505, 0.420], [0.506, 0.530], [0.420, 0.531]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r202",
+        "type": "room",
+        "label": "202",
+        "roomNumber": "202",
+        "points": [[0.420, 0.540], [0.505, 0.540], [0.506, 0.650], [0.420, 0.651]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r203",
+        "type": "room",
+        "label": "203",
+        "roomNumber": "203",
+        "points": [[0.420, 0.660], [0.505, 0.660], [0.506, 0.770], [0.420, 0.771]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "lobby",
+        "type": "lobby",
+        "label": "Lobby",
+        "roomNumber": "",
+        "points": [[0.560, 0.420], [0.950, 0.420], [0.950, 0.920], [0.560, 0.920]],
+        "status": "available",
+        "characteristics": {}
+      }
+    ]
+  }
+}
