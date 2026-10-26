@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Configuration — Area Types</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; }
+  h1 { margin-top: 0; }
+  .type-row { display: flex; gap: 8px; align-items: center; margin: 6px 0; padding: 8px; background: #f9f9f9; border-radius: 6px; }
+  .type-row input[type="text"] { flex: 1; padding: 6px; }
+  .type-row input[type="color"] { width: 48px; height: 32px; border: none; padding: 0; }
+  .type-row button { width: auto; padding: 6px 10px; }
+  .preview { width: 24px; height: 24px; border-radius: 4px; border: 1px solid #ccc; }
+  button { padding: 8px 14px; margin: 4px; cursor: pointer; }
+  .actions { margin-top: 16px; }
+  .id-hint { font-size: 12px; color: #666; min-width: 80px; }
+</style>
+</head>
+<body>
+<h1>Configuration</h1>
+<p>Edit area types and their colors. Changes are saved to the shared data used by the Editor and Navigator.</p>
+
+<div id="types-list"></div>
+
+<div class="actions">
+  <button onclick="addType()">+ Add new type</button>
+  <button onclick="save()" style="background:#27ae60;color:white">Save changes</button>
+  <button onclick="location.href='../editor/'">Back to Editor</button>
+  <button onclick="location.href='../navigator/'">Open Navigator</button>
+</div>
+
+<script src="../shared/storage.js"></script>
+<script>
+let data = loadData();
+
+function render() {
+  const el = document.getElementById('types-list');
+  el.innerHTML = data.areaTypes.map((t, i) => `
+    <div class="type-row">
+      <div class="preview" style="background:${t.color}"></div>
+      <span class="id-hint">${t.id}</span>
+      <input type="text" value="${escapeHtml(t.label)}" onchange="data.areaTypes[${i}].label=this.value; updatePreview(${i})">
+      <input type="color" value="${t.color}" onchange="data.areaTypes[${i}].color=this.value; updatePreview(${i})">
+      <button onclick="moveUp(${i})" ${i===0?'disabled':''}>↑</button>
+      <button onclick="moveDown(${i})" ${i===data.areaTypes.length-1?'disabled':''}>↓</button>
+      <button onclick="removeType(${i})" style="color:#c0392b">Delete</button>
+    </div>
+  `).join('');
+}
+
+function updatePreview(i) {
+  const row = document.querySelectorAll('.type-row')[i];
+  if (row) row.querySelector('.preview').style.background = data.areaTypes[i].color;
+}
+
+function escapeHtml(s) {
+  return (s||'').replace(/&/g,'&').replace(/</g,'<').replace(/"/g,'"');
+}
+
+function addType() {
+  const label = prompt('Name of the new area type?');
+  if (!label) return;
+  const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'type_' + Date.now();
+  if (data.areaTypes.some(t => t.id === id)) {
+    alert('A type with a similar id already exists. Choose a different name.');
+    return;
+  }
+  data.areaTypes.push({ id, label, color: '#7f8c8d' });
+  render();
+}
+
+function removeType(i) {
+  if (!confirm('Delete this area type? Existing areas that use it will fall back to the first type.')) return;
+  data.areaTypes.splice(i, 1);
+  render();
+}
+
+function moveUp(i) {
+  if (i <= 0) return;
+  [data.areaTypes[i-1], data.areaTypes[i]] = [data.areaTypes[i], data.areaTypes[i-1]];
+  render();
+}
+function moveDown(i) {
+  if (i >= data.areaTypes.length - 1) return;
+  [data.areaTypes[i], data.areaTypes[i+1]] = [data.areaTypes[i+1], data.areaTypes[i]];
+  render();
+}
+
+function save() {
+  saveData(data);
+  alert('Configuration saved.');
+}
+
+render();
+</script>
+</body>
+</html>
