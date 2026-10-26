@@ -22,6 +22,8 @@
   #type-config { font-size: 13px; }
   .type-row { display: flex; gap: 4px; margin: 2px 0; }
   .type-row input { flex: 1; }
+  #new-area-form { background: #fff; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin: 8px 0; display: none; }
+  #new-area-form label { font-size: 13px; }
 </style>
 </head>
 <body>
@@ -44,6 +46,14 @@
   <button id="start-draw">Start drawing</button>
   <button id="finish-poly" disabled>Finish polygon</button>
   <button id="cancel-poly">Cancel drawing</button>
+  <div id="new-area-form">
+    <label>Type</label>
+    <select id="new-type"></select>
+    <label>Label / Room number</label>
+    <input id="new-label" placeholder="e.g. 101 or Gym">
+    <button onclick="confirmNewArea()">Save area</button>
+    <button onclick="cancelNewArea()">Cancel</button>
+  </div>
   <hr>
   <div id="selected-info">No area selected</div>
   <hr>
@@ -57,6 +67,7 @@
     <button onclick="saveTypes()">Save types</button>
   </details>
   <hr>
+  <button onclick="exportFloorJson()">Export this floor (JSON)</button>
   <button id="save-all">Save everything</button>
   <button onclick="location.href='../navigator/'">Open Navigator</button>
 </div>
@@ -219,7 +230,6 @@ function redraw() {
   }
 }
 
-// Single clean click handler for drawing
 planImg.addEventListener('click', (e) => {
   if (!drawing) return;
   e.stopPropagation();
@@ -234,16 +244,25 @@ document.getElementById('start-draw').onclick = () => {
   currentPoints = [];
   selectedAreaId = null;
   document.getElementById('finish-poly').disabled = true;
+  document.getElementById('new-area-form').style.display = 'none';
   redraw();
 };
 
 document.getElementById('finish-poly').onclick = () => {
   if (currentPoints.length < 3) return;
-  const typeSel = prompt('Type id (room, gym, toilet, facilities...)', 'room') || 'room';
-  const label = prompt('Label / Room number?', '') || '';
+  // Show form with dropdown instead of prompt
+  const sel = document.getElementById('new-type');
+  sel.innerHTML = data.areaTypes.map(t => `<option value="${t.id}">${t.label}</option>`).join('');
+  document.getElementById('new-label').value = '';
+  document.getElementById('new-area-form').style.display = 'block';
+};
+
+function confirmNewArea() {
+  const typeId = document.getElementById('new-type').value;
+  const label = document.getElementById('new-label').value.trim();
   const area = {
     id: generateId(),
-    type: typeSel,
+    type: typeId,
     label: label,
     roomNumber: label,
     points: currentPoints.slice(),
@@ -253,16 +272,23 @@ document.getElementById('finish-poly').onclick = () => {
   currentFloor.areas.push(area);
   currentPoints = [];
   drawing = false;
+  document.getElementById('new-area-form').style.display = 'none';
+  document.getElementById('finish-poly').disabled = true;
   saveData(data);
   selectArea(area.id);
   redraw();
   renderAreasList();
-};
+}
+
+function cancelNewArea() {
+  document.getElementById('new-area-form').style.display = 'none';
+}
 
 document.getElementById('cancel-poly').onclick = () => {
   drawing = false;
   currentPoints = [];
   document.getElementById('finish-poly').disabled = true;
+  document.getElementById('new-area-form').style.display = 'none';
   redraw();
 };
 
@@ -362,6 +388,26 @@ function saveTypes() {
   saveData(data);
   alert('Area types saved');
   redraw();
+}
+
+function exportFloorJson() {
+  if (!currentFloor) return;
+  const exportObj = {
+    hotelId: currentHotel?.id,
+    hotelName: currentHotel?.name,
+    floor: {
+      id: currentFloor.id,
+      number: currentFloor.number,
+      planImage: currentFloor.planImage ? '[base64 omitted for size]' : null,
+      areas: currentFloor.areas
+    },
+    areaTypes: data.areaTypes
+  };
+  const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `floor-${currentFloor.number || currentFloor.id}.json`;
+  a.click();
 }
 
 document.getElementById('image-upload').onchange = (e) => {
