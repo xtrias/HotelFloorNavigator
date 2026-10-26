@@ -4,20 +4,19 @@
 <meta charset="UTF-8">
 <title>Hotel Floor Navigator</title>
 <style>
-  body { font-family: system-ui, sans-serif; margin: 0; display: flex; height: 100vh; }
-  #sidebar { width: 300px; background: #f8f8f8; padding: 12px; overflow-y: auto; border-right: 1px solid #ccc; }
-  #canvas-area { flex: 1; position: relative; overflow: auto; background: #eee; }
-  #plan { max-width: 100%; display: block; }
-  svg { position: absolute; top: 0; left: 0; }
-  svg polygon { stroke: #333; stroke-width: 1.5; cursor: pointer; }
-  .status-available { fill: rgba(46, 204, 113, 0.55); }
-  .status-occupied { fill: rgba(231, 76, 60, 0.55); }
-  .status-cleaning { fill: rgba(241, 196, 15, 0.55); }
-  .status-maintenance { fill: rgba(155, 89, 182, 0.55); }
-  .room-label { font-size: 12px; font-weight: bold; pointer-events: none; }
-  .modal { position: fixed; top: 20%; left: 50%; transform: translateX(-50%); background: white; padding: 16px; border: 1px solid #999; box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 10; min-width: 280px; }
-  .modal button { margin: 4px; }
-  #legend span { display: inline-block; width: 14px; height: 14px; margin-right: 4px; vertical-align: middle; }
+  body { font-family: system-ui, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+  #sidebar { width: 300px; background: #f8f8f8; padding: 12px; overflow-y: auto; border-right: 1px solid #ccc; flex-shrink: 0; }
+  #canvas-wrap { flex: 1; position: relative; overflow: auto; background: #eee; }
+  #viewport { position: relative; transform-origin: 0 0; }
+  #plan { display: block; }
+  #overlay { position: absolute; top: 0; left: 0; }
+  polygon { stroke: #333; stroke-width: 1.5; cursor: pointer; }
+  .status-available { opacity: 0.7; }
+  .status-occupied { opacity: 0.85; }
+  .room-label { font-size: 12px; font-weight: bold; pointer-events: none; fill: #111; }
+  .modal { position: fixed; top: 15%; left: 50%; transform: translateX(-50%); background: white; padding: 16px; border: 1px solid #999; box-shadow: 0 4px 20px rgba(0,0,0,0.25); z-index: 20; min-width: 300px; }
+  .zoom-controls button { width: auto; margin-right: 6px; }
+  button, input, select, textarea { margin: 4px 0; width: 100%; box-sizing: border-box; }
 </style>
 </head>
 <body>
@@ -26,21 +25,24 @@
   <div id="hotel-select"></div>
   <div id="floor-select"></div>
   <hr>
-  <div id="legend">
-    <strong>Status</strong><br>
-    <span style="background:#2ecc71"></span> Available<br>
-    <span style="background:#e74c3c"></span> Occupied<br>
-    <span style="background:#f1c40f"></span> Cleaning<br>
-    <span style="background:#9b59b6"></span> Maintenance
+  <div class="zoom-controls">
+    <button onclick="zoomBy(1.2)">Zoom +</button>
+    <button onclick="zoomBy(0.8)">Zoom −</button>
+    <button onclick="resetZoom()">100%</button>
+    <span id="zoom-label">100%</span>
   </div>
+  <hr>
+  <div id="legend"></div>
   <hr>
   <div id="stats"></div>
   <hr>
   <button onclick="location.href='../editor/'">Open Editor</button>
 </div>
-<div id="canvas-area">
-  <img id="plan" alt="Floor plan">
-  <svg id="overlay"></svg>
+<div id="canvas-wrap">
+  <div id="viewport">
+    <img id="plan" alt="Floor plan">
+    <svg id="overlay"></svg>
+  </div>
 </div>
 <div id="modal" class="modal" style="display:none"></div>
 <script src="../shared/storage.js"></script>
@@ -48,9 +50,28 @@
 ensureSample();
 let data = loadData();
 let currentHotel, currentFloor;
+let zoom = 1;
 
 const planImg = document.getElementById('plan');
 const overlay = document.getElementById('overlay');
+const viewport = document.getElementById('viewport');
+const canvasWrap = document.getElementById('canvas-wrap');
+
+function setZoom(z) {
+  zoom = Math.max(0.2, Math.min(5, z));
+  viewport.style.transform = `scale(${zoom})`;
+  document.getElementById('zoom-label').textContent = Math.round(zoom * 100) + '%';
+  updateOverlay();
+}
+function zoomBy(f) { setZoom(zoom * f); }
+function resetZoom() { setZoom(1); }
+
+canvasWrap.addEventListener('wheel', (e) => {
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault();
+    zoomBy(e.deltaY > 0 ? 0.9 : 1.1);
+  }
+}, { passive: false });
 
 function renderHotels() {
   const sel = document.getElementById('hotel-select');
@@ -84,57 +105,69 @@ function selectFloor(id) {
 function loadFloor() {
   if (!currentFloor) return;
   planImg.src = currentFloor.planImage || '';
-  planImg.onload = () => { updateOverlaySize(); redrawAreas(); };
-  updateOverlaySize();
-  redrawAreas();
+  planImg.onload = () => updateOverlay();
+  updateOverlay();
   updateStats();
+  renderLegend();
 }
 
-function updateOverlaySize() {
-  overlay.setAttribute('width', planImg.offsetWidth);
-  overlay.setAttribute('height', planImg.offsetHeight);
-  overlay.style.width = planImg.offsetWidth + 'px';
-  overlay.style.height = planImg.offsetHeight + 'px';
+function updateOverlay() {
+  if (!planImg.naturalWidth) return;
+  const w = planImg.offsetWidth;
+  const h = planImg.offsetHeight;
+  overlay.setAttribute('width', w);
+  overlay.setAttribute('height', h);
+  overlay.style.width = w + 'px';
+  overlay.style.height = h + 'px';
+  redraw();
 }
 
-function redrawAreas() {
+function redraw() {
   overlay.innerHTML = '';
   if (!currentFloor || !planImg.offsetWidth) return;
+  const w = planImg.offsetWidth;
+  const h = planImg.offsetHeight;
   currentFloor.areas.forEach(area => {
+    const t = getAreaType(data, area.type);
     const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    const pts = area.points.map(p => `${p[0] * planImg.offsetWidth},${p[1] * planImg.offsetHeight}`).join(' ');
+    const pts = area.points.map(p => `${p[0]*w},${p[1]*h}`).join(' ');
     poly.setAttribute('points', pts);
+    poly.style.fill = t.color + '99';
+    poly.style.stroke = t.color;
     poly.classList.add('status-' + (area.status || 'available'));
     poly.onclick = () => openModal(area);
     overlay.appendChild(poly);
 
-    // simple label at centroid
     if (area.points.length) {
-      const cx = area.points.reduce((s,p)=>s+p[0],0)/area.points.length * planImg.offsetWidth;
-      const cy = area.points.reduce((s,p)=>s+p[1],0)/area.points.length * planImg.offsetHeight;
+      const cx = area.points.reduce((s,p)=>s+p[0],0)/area.points.length * w;
+      const cy = area.points.reduce((s,p)=>s+p[1],0)/area.points.length * h;
       const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       text.setAttribute('x', cx);
       text.setAttribute('y', cy);
       text.setAttribute('text-anchor', 'middle');
       text.setAttribute('class', 'room-label');
-      text.textContent = area.roomNumber || '';
+      text.textContent = area.label || area.roomNumber || t.label;
       overlay.appendChild(text);
     }
   });
 }
 
+function renderLegend() {
+  document.getElementById('legend').innerHTML = '<strong>Types</strong><br>' +
+    data.areaTypes.map(t => `<span style="display:inline-block;width:12px;height:12px;background:${t.color};margin-right:4px"></span>${t.label}<br>`).join('');
+}
+
 function openModal(area) {
   const modal = document.getElementById('modal');
+  const t = getAreaType(data, area.type);
   modal.style.display = 'block';
   modal.innerHTML = `
-    <h3>Room ${area.roomNumber}</h3>
+    <h3>${area.label || area.roomNumber || 'Area'} <small>(${t.label})</small></h3>
     Status:<br>
     <select id="status-sel">
-      ${['available','occupied','cleaning','maintenance'].map(s =>
+      ${['available','occupied','cleaning','maintenance','closed'].map(s =>
         `<option value="${s}" ${s===area.status?'selected':''}>${s}</option>`).join('')}
     </select><br>
-    Beds: <input id="beds" value="${area.characteristics?.beds||''}"><br>
-    Capacity: <input id="cap" type="number" value="${area.characteristics?.capacity||2}"><br>
     Notes: <textarea id="notes">${area.characteristics?.notes||''}</textarea><br>
     <button onclick="saveModal('${area.id}')">Save</button>
     <button onclick="document.getElementById('modal').style.display='none'">Close</button>
@@ -146,26 +179,30 @@ function saveModal(id) {
   if (!area) return;
   area.status = document.getElementById('status-sel').value;
   area.characteristics = area.characteristics || {};
-  area.characteristics.beds = document.getElementById('beds').value;
-  area.characteristics.capacity = Number(document.getElementById('cap').value);
   area.characteristics.notes = document.getElementById('notes').value;
   saveData(data);
   document.getElementById('modal').style.display = 'none';
-  redrawAreas();
+  redraw();
   updateStats();
 }
 
 function updateStats() {
   if (!currentFloor) return;
-  const counts = { available:0, occupied:0, cleaning:0, maintenance:0 };
-  currentFloor.areas.forEach(a => { counts[a.status] = (counts[a.status]||0)+1; });
+  const byType = {};
+  currentFloor.areas.forEach(a => {
+    byType[a.type] = (byType[a.type]||0) + 1;
+  });
   document.getElementById('stats').innerHTML =
-    `<strong>Rooms: ${currentFloor.areas.length}</strong><br>` +
-    Object.entries(counts).map(([k,v]) => `${k}: ${v}`).join('<br>');
+    `<strong>Total areas: ${currentFloor.areas.length}</strong><br>` +
+    Object.entries(byType).map(([k,v]) => {
+      const t = getAreaType(data, k);
+      return `${t.label}: ${v}`;
+    }).join('<br>');
 }
 
-window.addEventListener('resize', () => { updateOverlaySize(); redrawAreas(); });
+window.addEventListener('resize', updateOverlay);
 renderHotels();
+setZoom(1);
 </script>
 </body>
 </html>
