@@ -4,38 +4,68 @@
 <meta charset="UTF-8">
 <title>Hotel Floor Editor</title>
 <style>
-  body { font-family: system-ui, sans-serif; margin: 0; display: flex; height: 100vh; }
-  #sidebar { width: 280px; background: #f4f4f4; padding: 12px; overflow-y: auto; border-right: 1px solid #ccc; }
-  #canvas-area { flex: 1; position: relative; overflow: auto; background: #ddd; }
-  #plan { max-width: 100%; display: block; }
-  svg { position: absolute; top: 0; left: 0; pointer-events: none; }
-  svg polygon { pointer-events: all; fill: rgba(0,120,255,0.3); stroke: #0066cc; stroke-width: 2; cursor: pointer; }
-  svg polygon.selected { fill: rgba(255,100,0,0.4); stroke: #ff6600; }
-  button, input, select { margin: 4px 0; width: 100%; box-sizing: border-box; }
-  .area-item { background: white; margin: 4px 0; padding: 6px; border-radius: 4px; font-size: 14px; }
+  body { font-family: system-ui, sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+  #sidebar { width: 320px; background: #f4f4f4; padding: 12px; overflow-y: auto; border-right: 1px solid #ccc; flex-shrink: 0; }
+  #canvas-wrap { flex: 1; position: relative; overflow: auto; background: #ccc; }
+  #viewport { position: relative; transform-origin: 0 0; }
+  #plan { display: block; max-width: none; }
+  #overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
+  #overlay polygon, #overlay circle, #overlay polyline { pointer-events: all; }
+  polygon { fill: rgba(52,152,219,0.35); stroke: #2980b9; stroke-width: 2; cursor: pointer; }
+  polygon.selected { fill: rgba(231,76,60,0.4); stroke: #c0392b; }
+  polygon.drawing { fill: none; stroke: #e74c3c; stroke-dasharray: 4; }
+  circle.handle { fill: #fff; stroke: #333; stroke-width: 2; cursor: move; }
+  .zoom-controls { position: sticky; top: 0; background: #eee; padding: 6px; z-index: 5; }
+  .zoom-controls button { width: auto; margin-right: 6px; padding: 4px 10px; }
+  button, input, select, textarea { margin: 4px 0; width: 100%; box-sizing: border-box; }
+  .area-item { background: white; margin: 4px 0; padding: 6px; border-radius: 4px; font-size: 13px; cursor: pointer; }
+  .area-item:hover { background: #e8f4fd; }
+  #type-config { font-size: 13px; }
+  .type-row { display: flex; gap: 4px; margin: 2px 0; }
+  .type-row input { flex: 1; }
 </style>
 </head>
 <body>
 <div id="sidebar">
-  <h3>Editor</h3>
+  <h3>Floor Plan Editor</h3>
   <div id="hotel-select"></div>
   <div id="floor-select"></div>
   <hr>
-  <label>Upload floor plan image</label>
+  <label>Upload floor plan</label>
   <input type="file" id="image-upload" accept="image/*">
   <hr>
-  <p><strong>Drawing mode:</strong> click points on the image to create a room polygon. Double-click or press Finish to close.</p>
-  <button id="finish-poly">Finish polygon</button>
-  <button id="cancel-poly">Cancel</button>
+  <div class="zoom-controls">
+    <button onclick="zoomBy(1.2)">Zoom +</button>
+    <button onclick="zoomBy(0.8)">Zoom −</button>
+    <button onclick="resetZoom()">100%</button>
+    <span id="zoom-label">100%</span>
+  </div>
   <hr>
-  <div id="selected-info">Select or create a room</div>
+  <p><strong>Drawing:</strong> Click "Start drawing", then click points on the plan. Finish when done.</p>
+  <button id="start-draw">Start drawing</button>
+  <button id="finish-poly" disabled>Finish polygon</button>
+  <button id="cancel-poly">Cancel drawing</button>
   <hr>
+  <div id="selected-info">No area selected</div>
+  <hr>
+  <h4>Areas on this floor</h4>
   <div id="areas-list"></div>
-  <button id="save">Save all</button>
+  <hr>
+  <details>
+    <summary><strong>Configure area types</strong></summary>
+    <div id="type-config"></div>
+    <button onclick="addAreaType()">+ Add type</button>
+    <button onclick="saveTypes()">Save types</button>
+  </details>
+  <hr>
+  <button id="save-all">Save everything</button>
+  <button onclick="location.href='../navigator/'">Open Navigator</button>
 </div>
-<div id="canvas-area">
-  <img id="plan" alt="Floor plan">
-  <svg id="overlay"></svg>
+<div id="canvas-wrap">
+  <div id="viewport">
+    <img id="plan" alt="Floor plan">
+    <svg id="overlay"></svg>
+  </div>
 </div>
 <script src="../shared/storage.js"></script>
 <script>
@@ -45,10 +75,29 @@ let currentHotel, currentFloor;
 let drawing = false;
 let currentPoints = [];
 let selectedAreaId = null;
+let zoom = 1;
+let draggingPoint = null;
 
 const planImg = document.getElementById('plan');
 const overlay = document.getElementById('overlay');
-const canvasArea = document.getElementById('canvas-area');
+const viewport = document.getElementById('viewport');
+const canvasWrap = document.getElementById('canvas-wrap');
+
+function setZoom(z) {
+  zoom = Math.max(0.2, Math.min(5, z));
+  viewport.style.transform = `scale(${zoom})`;
+  document.getElementById('zoom-label').textContent = Math.round(zoom * 100) + '%';
+  updateOverlay();
+}
+function zoomBy(f) { setZoom(zoom * f); }
+function resetZoom() { setZoom(1); }
+
+canvasWrap.addEventListener('wheel', (e) => {
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault();
+    zoomBy(e.deltaY > 0 ? 0.9 : 1.1);
+  }
+}, { passive: false });
 
 function renderHotels() {
   const sel = document.getElementById('hotel-select');
@@ -82,106 +131,258 @@ function selectFloor(id) {
 function loadFloor() {
   if (!currentFloor) return;
   planImg.src = currentFloor.planImage || '';
-  planImg.onload = updateOverlaySize;
-  updateOverlaySize();
-  redrawAreas();
+  planImg.onload = () => updateOverlay();
+  updateOverlay();
   renderAreasList();
+  renderTypeConfig();
 }
 
-function updateOverlaySize() {
-  const rect = planImg.getBoundingClientRect();
-  overlay.setAttribute('width', planImg.offsetWidth);
-  overlay.setAttribute('height', planImg.offsetHeight);
-  overlay.style.width = planImg.offsetWidth + 'px';
-  overlay.style.height = planImg.offsetHeight + 'px';
+function updateOverlay() {
+  if (!planImg.naturalWidth) return;
+  const w = planImg.offsetWidth;
+  const h = planImg.offsetHeight;
+  overlay.setAttribute('width', w);
+  overlay.setAttribute('height', h);
+  overlay.style.width = w + 'px';
+  overlay.style.height = h + 'px';
+  redraw();
 }
 
-function redrawAreas() {
+function redraw() {
   overlay.innerHTML = '';
-  if (!currentFloor) return;
+  if (!currentFloor || !planImg.offsetWidth) return;
+  const w = planImg.offsetWidth;
+  const h = planImg.offsetHeight;
+
+  // Existing areas
   currentFloor.areas.forEach(area => {
     const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    const pts = area.points.map(p => `${p[0] * planImg.offsetWidth},${p[1] * planImg.offsetHeight}`).join(' ');
+    const pts = area.points.map(p => `${p[0]*w},${p[1]*h}`).join(' ');
     poly.setAttribute('points', pts);
-    poly.dataset.id = area.id;
+    const t = getAreaType(data, area.type);
+    poly.style.fill = t.color + '88';
+    poly.style.stroke = t.color;
     if (area.id === selectedAreaId) poly.classList.add('selected');
-    poly.onclick = () => selectArea(area.id);
+    poly.onclick = (e) => { e.stopPropagation(); selectArea(area.id); };
     overlay.appendChild(poly);
+
+    // Label
+    if (area.points.length) {
+      const cx = area.points.reduce((s,p)=>s+p[0],0)/area.points.length * w;
+      const cy = area.points.reduce((s,p)=>s+p[1],0)/area.points.length * h;
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', cx); text.setAttribute('y', cy);
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('font-size', '14');
+      text.setAttribute('font-weight', 'bold');
+      text.setAttribute('fill', '#000');
+      text.style.pointerEvents = 'none';
+      text.textContent = area.label || area.roomNumber || area.type;
+      overlay.appendChild(text);
+    }
+
+    // Vertex handles if selected
+    if (area.id === selectedAreaId) {
+      area.points.forEach((p, idx) => {
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('cx', p[0]*w);
+        c.setAttribute('cy', p[1]*h);
+        c.setAttribute('r', 6 / zoom);
+        c.classList.add('handle');
+        c.onmousedown = (e) => {
+          e.stopPropagation();
+          draggingPoint = { areaId: area.id, idx };
+        };
+        overlay.appendChild(c);
+      });
+    }
   });
+
+  // Current drawing polyline
+  if (drawing && currentPoints.length) {
+    const pl = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    const pts = currentPoints.map(p => `${p[0]*w},${p[1]*h}`).join(' ');
+    pl.setAttribute('points', pts);
+    pl.setAttribute('fill', 'none');
+    pl.setAttribute('stroke', '#e74c3c');
+    pl.setAttribute('stroke-width', 2);
+    pl.setAttribute('stroke-dasharray', '5,5');
+    overlay.appendChild(pl);
+    currentPoints.forEach(p => {
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('cx', p[0]*w); c.setAttribute('cy', p[1]*h); c.setAttribute('r', 4);
+      c.setAttribute('fill', '#e74c3c');
+      overlay.appendChild(c);
+    });
+  }
 }
 
-planImg.onclick = (e) => {
+// Drawing clicks
+planImg.addEventListener('click', (e) => {
   if (!drawing) return;
   const rect = planImg.getBoundingClientRect();
-  const x = (e.clientX - rect.left) / planImg.offsetWidth;
-  const y = (e.clientY - rect.top) / planImg.offsetHeight;
+  const x = (e.clientX - rect.left) / (planImg.offsetWidth * zoom);
+  const y = (e.clientY - rect.top) / (planImg.offsetHeight * zoom);
+  // Because of CSS transform on parent, client coords need adjustment
+  // Better: use offset relative to image after transform
   currentPoints.push([x, y]);
-  // temp visual - for draft just accumulate
+  redraw();
+  document.getElementById('finish-poly').disabled = currentPoints.length < 3;
+});
+
+// Fix coordinate calculation with transform
+function getRelativePoint(e) {
+  const rect = planImg.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / rect.width;
+  const y = (e.clientY - rect.top) / rect.height;
+  return [Math.max(0, Math.min(1, x)), Math.max(0, Math.min(1, y))];
+}
+
+planImg.addEventListener('click', (e) => {
+  if (!drawing) return;
+  const [x, y] = getRelativePoint(e);
+  currentPoints.push([x, y]);
+  redraw();
+  document.getElementById('finish-poly').disabled = currentPoints.length < 3;
+});
+
+// Remove the previous broken listener by redefining
+planImg.onclick = null;
+
+document.getElementById('start-draw').onclick = () => {
+  drawing = true;
+  currentPoints = [];
+  selectedAreaId = null;
+  document.getElementById('finish-poly').disabled = true;
+  redraw();
 };
 
 document.getElementById('finish-poly').onclick = () => {
-  if (currentPoints.length < 3) return alert('Need at least 3 points');
-  const roomNum = prompt('Room number?') || 'R' + Date.now().toString().slice(-4);
+  if (currentPoints.length < 3) return;
+  const typeSel = prompt('Type id (room, gym, toilet, facilities...)', 'room') || 'room';
+  const label = prompt('Label / Room number?', '') || '';
   const area = {
     id: generateId(),
-    type: 'room',
-    roomNumber: roomNum,
-    points: currentPoints,
+    type: typeSel,
+    label: label,
+    roomNumber: label,
+    points: currentPoints.slice(),
     status: 'available',
-    characteristics: { beds: '', capacity: 2, notes: '' }
+    characteristics: {}
   };
   currentFloor.areas.push(area);
   currentPoints = [];
   drawing = false;
   saveData(data);
-  redrawAreas();
+  selectArea(area.id);
+  redraw();
   renderAreasList();
 };
 
-document.getElementById('cancel-poly').onclick = () => { currentPoints = []; drawing = false; };
+document.getElementById('cancel-poly').onclick = () => {
+  drawing = false;
+  currentPoints = [];
+  document.getElementById('finish-poly').disabled = true;
+  redraw();
+};
 
-// Start drawing on double-click empty or button - for draft, add a start button conceptually
-// Simple: hold shift or just always allow click when no selection. For draft:
-planImg.ondblclick = () => { drawing = true; currentPoints = []; alert('Click to place points, then Finish'); };
+// Drag vertices
+window.addEventListener('mousemove', (e) => {
+  if (!draggingPoint) return;
+  const [x, y] = getRelativePoint(e);
+  const area = currentFloor.areas.find(a => a.id === draggingPoint.areaId);
+  if (area) {
+    area.points[draggingPoint.idx] = [x, y];
+    redraw();
+  }
+});
+window.addEventListener('mouseup', () => {
+  if (draggingPoint) {
+    saveData(data);
+    draggingPoint = null;
+  }
+});
 
 function selectArea(id) {
   selectedAreaId = id;
+  drawing = false;
   const area = currentFloor.areas.find(a => a.id === id);
+  if (!area) return;
+  const typeOptions = data.areaTypes.map(t =>
+    `<option value="${t.id}" ${t.id===area.type?'selected':''}>${t.label}</option>`
+  ).join('');
   document.getElementById('selected-info').innerHTML = `
-    <strong>${area.roomNumber}</strong><br>
-    Status: <select onchange="updateStatus('${id}', this.value)">
-      ${['available','occupied','cleaning','maintenance'].map(s => `<option ${s===area.status?'selected':''}>${s}</option>`).join('')}
-    </select><br>
-    Beds: <input value="${area.characteristics.beds||''}" onchange="updateChar('${id}','beds',this.value)">
-    <button onclick="deleteArea('${id}')">Delete</button>
+    <label>Type</label>
+    <select id="edit-type" onchange="updateAreaType('${id}', this.value)">${typeOptions}</select>
+    <label>Label / Room #</label>
+    <input id="edit-label" value="${area.label||area.roomNumber||''}" onchange="updateLabel('${id}', this.value)">
+    <label>Status</label>
+    <select onchange="updateStatus('${id}', this.value)">
+      ${['available','occupied','cleaning','maintenance','closed'].map(s =>
+        `<option ${s===area.status?'selected':''}>${s}</option>`).join('')}
+    </select>
+    <button onclick="deleteArea('${id}')" style="background:#e74c3c;color:white">Delete area</button>
   `;
-  redrawAreas();
+  redraw();
 }
 
+function updateAreaType(id, type) {
+  const area = currentFloor.areas.find(a => a.id === id);
+  area.type = type;
+  saveData(data);
+  redraw();
+}
+function updateLabel(id, val) {
+  const area = currentFloor.areas.find(a => a.id === id);
+  area.label = val;
+  area.roomNumber = val;
+  saveData(data);
+  redraw();
+  renderAreasList();
+}
 function updateStatus(id, status) {
   const area = currentFloor.areas.find(a => a.id === id);
   area.status = status;
   saveData(data);
 }
-function updateChar(id, key, val) {
-  const area = currentFloor.areas.find(a => a.id === id);
-  area.characteristics[key] = val;
-  saveData(data);
-}
 function deleteArea(id) {
+  if (!confirm('Delete this area?')) return;
   currentFloor.areas = currentFloor.areas.filter(a => a.id !== id);
+  selectedAreaId = null;
   saveData(data);
-  redrawAreas();
+  document.getElementById('selected-info').innerHTML = 'No area selected';
+  redraw();
   renderAreasList();
-  document.getElementById('selected-info').innerHTML = 'Select or create a room';
 }
 
 function renderAreasList() {
   const list = document.getElementById('areas-list');
-  list.innerHTML = '<h4>Rooms on floor</h4>' +
-    (currentFloor?.areas || []).map(a =>
-      `<div class="area-item" onclick="selectArea('${a.id}')">${a.roomNumber} — ${a.status}</div>`
-    ).join('');
+  list.innerHTML = (currentFloor?.areas || []).map(a => {
+    const t = getAreaType(data, a.type);
+    return `<div class="area-item" onclick="selectArea('${a.id}')" style="border-left:4px solid ${t.color}">${a.label||a.roomNumber||'(no label)'} — ${t.label}</div>`;
+  }).join('') || '<em>No areas yet</em>';
+}
+
+function renderTypeConfig() {
+  const el = document.getElementById('type-config');
+  el.innerHTML = data.areaTypes.map((t, i) => `
+    <div class="type-row">
+      <input value="${t.label}" onchange="data.areaTypes[${i}].label=this.value">
+      <input type="color" value="${t.color}" onchange="data.areaTypes[${i}].color=this.value" style="width:40px">
+      <button onclick="data.areaTypes.splice(${i},1); renderTypeConfig();" style="width:auto">×</button>
+    </div>
+  `).join('');
+}
+function addAreaType() {
+  const label = prompt('Type name?');
+  if (!label) return;
+  data.areaTypes.push({ id: label.toLowerCase().replace(/\s+/g,'_'), label, color: '#7f8c8d' });
+  renderTypeConfig();
+}
+function saveTypes() {
+  saveData(data);
+  alert('Area types saved');
+  redraw();
 }
 
 document.getElementById('image-upload').onchange = (e) => {
@@ -209,10 +410,11 @@ function addFloor() {
   renderFloors();
 }
 
-document.getElementById('save').onclick = () => { saveData(data); alert('Saved'); };
+document.getElementById('save-all').onclick = () => { saveData(data); alert('Saved'); };
 
-window.addEventListener('resize', updateOverlaySize);
+window.addEventListener('resize', updateOverlay);
 renderHotels();
+setZoom(1);
 </script>
 </body>
 </html>
