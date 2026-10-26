@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hotel Floor Editor</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; display: flex; height: 100vh; }
+  #sidebar { width: 280px; background: #f4f4f4; padding: 12px; overflow-y: auto; border-right: 1px solid #ccc; }
+  #canvas-area { flex: 1; position: relative; overflow: auto; background: #ddd; }
+  #plan { max-width: 100%; display: block; }
+  svg { position: absolute; top: 0; left: 0; pointer-events: none; }
+  svg polygon { pointer-events: all; fill: rgba(0,120,255,0.3); stroke: #0066cc; stroke-width: 2; cursor: pointer; }
+  svg polygon.selected { fill: rgba(255,100,0,0.4); stroke: #ff6600; }
+  button, input, select { margin: 4px 0; width: 100%; box-sizing: border-box; }
+  .area-item { background: white; margin: 4px 0; padding: 6px; border-radius: 4px; font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="sidebar">
+  <h3>Editor</h3>
+  <div id="hotel-select"></div>
+  <div id="floor-select"></div>
+  <hr>
+  <label>Upload floor plan image</label>
+  <input type="file" id="image-upload" accept="image/*">
+  <hr>
+  <p><strong>Drawing mode:</strong> click points on the image to create a room polygon. Double-click or press Finish to close.</p>
+  <button id="finish-poly">Finish polygon</button>
+  <button id="cancel-poly">Cancel</button>
+  <hr>
+  <div id="selected-info">Select or create a room</div>
+  <hr>
+  <div id="areas-list"></div>
+  <button id="save">Save all</button>
+</div>
+<div id="canvas-area">
+  <img id="plan" alt="Floor plan">
+  <svg id="overlay"></svg>
+</div>
+<script src="../shared/storage.js"></script>
+<script>
+ensureSample();
+let data = loadData();
+let currentHotel, currentFloor;
+let drawing = false;
+let currentPoints = [];
+let selectedAreaId = null;
+
+const planImg = document.getElementById('plan');
+const overlay = document.getElementById('overlay');
+const canvasArea = document.getElementById('canvas-area');
+
+function renderHotels() {
+  const sel = document.getElementById('hotel-select');
+  sel.innerHTML = '<label>Hotel</label><select id="hotel">' +
+    data.hotels.map(h => `<option value="${h.id}">${h.name}</option>`).join('') +
+    '</select><button onclick="addHotel()">+ Hotel</button>';
+  document.getElementById('hotel').onchange = () => selectHotel(document.getElementById('hotel').value);
+  if (data.hotels.length) selectHotel(data.hotels[0].id);
+}
+
+function selectHotel(id) {
+  currentHotel = data.hotels.find(h => h.id === id);
+  renderFloors();
+}
+
+function renderFloors() {
+  const sel = document.getElementById('floor-select');
+  if (!currentHotel) return;
+  sel.innerHTML = '<label>Floor</label><select id="floor">' +
+    currentHotel.floors.map(f => `<option value="${f.id}">Floor ${f.number}</option>`).join('') +
+    '</select><button onclick="addFloor()">+ Floor</button>';
+  document.getElementById('floor').onchange = () => selectFloor(document.getElementById('floor').value);
+  if (currentHotel.floors.length) selectFloor(currentHotel.floors[0].id);
+}
+
+function selectFloor(id) {
+  currentFloor = currentHotel.floors.find(f => f.id === id);
+  loadFloor();
+}
+
+function loadFloor() {
+  if (!currentFloor) return;
+  planImg.src = currentFloor.planImage || '';
+  planImg.onload = updateOverlaySize;
+  updateOverlaySize();
+  redrawAreas();
+  renderAreasList();
+}
+
+function updateOverlaySize() {
+  const rect = planImg.getBoundingClientRect();
+  overlay.setAttribute('width', planImg.offsetWidth);
+  overlay.setAttribute('height', planImg.offsetHeight);
+  overlay.style.width = planImg.offsetWidth + 'px';
+  overlay.style.height = planImg.offsetHeight + 'px';
+}
+
+function redrawAreas() {
+  overlay.innerHTML = '';
+  if (!currentFloor) return;
+  currentFloor.areas.forEach(area => {
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    const pts = area.points.map(p => `${p[0] * planImg.offsetWidth},${p[1] * planImg.offsetHeight}`).join(' ');
+    poly.setAttribute('points', pts);
+    poly.dataset.id = area.id;
+    if (area.id === selectedAreaId) poly.classList.add('selected');
+    poly.onclick = () => selectArea(area.id);
+    overlay.appendChild(poly);
+  });
+}
+
+planImg.onclick = (e) => {
+  if (!drawing) return;
+  const rect = planImg.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / planImg.offsetWidth;
+  const y = (e.clientY - rect.top) / planImg.offsetHeight;
+  currentPoints.push([x, y]);
+  // temp visual - for draft just accumulate
+};
+
+document.getElementById('finish-poly').onclick = () => {
+  if (currentPoints.length < 3) return alert('Need at least 3 points');
+  const roomNum = prompt('Room number?') || 'R' + Date.now().toString().slice(-4);
+  const area = {
+    id: generateId(),
+    type: 'room',
+    roomNumber: roomNum,
+    points: currentPoints,
+    status: 'available',
+    characteristics: { beds: '', capacity: 2, notes: '' }
+  };
+  currentFloor.areas.push(area);
+  currentPoints = [];
+  drawing = false;
+  saveData(data);
+  redrawAreas();
+  renderAreasList();
+};
+
+document.getElementById('cancel-poly').onclick = () => { currentPoints = []; drawing = false; };
+
+// Start drawing on double-click empty or button - for draft, add a start button conceptually
+// Simple: hold shift or just always allow click when no selection. For draft:
+planImg.ondblclick = () => { drawing = true; currentPoints = []; alert('Click to place points, then Finish'); };
+
+function selectArea(id) {
+  selectedAreaId = id;
+  const area = currentFloor.areas.find(a => a.id === id);
+  document.getElementById('selected-info').innerHTML = `
+    <strong>${area.roomNumber}</strong><br>
+    Status: <select onchange="updateStatus('${id}', this.value)">
+      ${['available','occupied','cleaning','maintenance'].map(s => `<option ${s===area.status?'selected':''}>${s}</option>`).join('')}
+    </select><br>
+    Beds: <input value="${area.characteristics.beds||''}" onchange="updateChar('${id}','beds',this.value)">
+    <button onclick="deleteArea('${id}')">Delete</button>
+  `;
+  redrawAreas();
+}
+
+function updateStatus(id, status) {
+  const area = currentFloor.areas.find(a => a.id === id);
+  area.status = status;
+  saveData(data);
+}
+function updateChar(id, key, val) {
+  const area = currentFloor.areas.find(a => a.id === id);
+  area.characteristics[key] = val;
+  saveData(data);
+}
+function deleteArea(id) {
+  currentFloor.areas = currentFloor.areas.filter(a => a.id !== id);
+  saveData(data);
+  redrawAreas();
+  renderAreasList();
+  document.getElementById('selected-info').innerHTML = 'Select or create a room';
+}
+
+function renderAreasList() {
+  const list = document.getElementById('areas-list');
+  list.innerHTML = '<h4>Rooms on floor</h4>' +
+    (currentFloor?.areas || []).map(a =>
+      `<div class="area-item" onclick="selectArea('${a.id}')">${a.roomNumber} — ${a.status}</div>`
+    ).join('');
+}
+
+document.getElementById('image-upload').onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file || !currentFloor) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    currentFloor.planImage = reader.result;
+    saveData(data);
+    loadFloor();
+  };
+  reader.readAsDataURL(file);
+};
+
+function addHotel() {
+  const name = prompt('Hotel name') || 'New Hotel';
+  data.hotels.push({ id: generateId(), name, floors: [] });
+  saveData(data);
+  renderHotels();
+}
+function addFloor() {
+  const num = prompt('Floor number', '1') || 1;
+  currentHotel.floors.push({ id: generateId(), number: Number(num), planImage: null, areas: [] });
+  saveData(data);
+  renderFloors();
+}
+
+document.getElementById('save').onclick = () => { saveData(data); alert('Saved'); };
+
+window.addEventListener('resize', updateOverlaySize);
+renderHotels();
+</script>
+</body>
+</html>
