@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hotel Floor Navigator</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; display: flex; height: 100vh; }
+  #sidebar { width: 300px; background: #f8f8f8; padding: 12px; overflow-y: auto; border-right: 1px solid #ccc; }
+  #canvas-area { flex: 1; position: relative; overflow: auto; background: #eee; }
+  #plan { max-width: 100%; display: block; }
+  svg { position: absolute; top: 0; left: 0; }
+  svg polygon { stroke: #333; stroke-width: 1.5; cursor: pointer; }
+  .status-available { fill: rgba(46, 204, 113, 0.55); }
+  .status-occupied { fill: rgba(231, 76, 60, 0.55); }
+  .status-cleaning { fill: rgba(241, 196, 15, 0.55); }
+  .status-maintenance { fill: rgba(155, 89, 182, 0.55); }
+  .room-label { font-size: 12px; font-weight: bold; pointer-events: none; }
+  .modal { position: fixed; top: 20%; left: 50%; transform: translateX(-50%); background: white; padding: 16px; border: 1px solid #999; box-shadow: 0 4px 20px rgba(0,0,0,0.2); z-index: 10; min-width: 280px; }
+  .modal button { margin: 4px; }
+  #legend span { display: inline-block; width: 14px; height: 14px; margin-right: 4px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<div id="sidebar">
+  <h3>Navigator</h3>
+  <div id="hotel-select"></div>
+  <div id="floor-select"></div>
+  <hr>
+  <div id="legend">
+    <strong>Status</strong><br>
+    <span style="background:#2ecc71"></span> Available<br>
+    <span style="background:#e74c3c"></span> Occupied<br>
+    <span style="background:#f1c40f"></span> Cleaning<br>
+    <span style="background:#9b59b6"></span> Maintenance
+  </div>
+  <hr>
+  <div id="stats"></div>
+  <hr>
+  <button onclick="location.href='../editor/'">Open Editor</button>
+</div>
+<div id="canvas-area">
+  <img id="plan" alt="Floor plan">
+  <svg id="overlay"></svg>
+</div>
+<div id="modal" class="modal" style="display:none"></div>
+<script src="../shared/storage.js"></script>
+<script>
+ensureSample();
+let data = loadData();
+let currentHotel, currentFloor;
+
+const planImg = document.getElementById('plan');
+const overlay = document.getElementById('overlay');
+
+function renderHotels() {
+  const sel = document.getElementById('hotel-select');
+  sel.innerHTML = '<label>Hotel</label><select id="hotel">' +
+    data.hotels.map(h => `<option value="${h.id}">${h.name}</option>`).join('') +
+    '</select>';
+  document.getElementById('hotel').onchange = () => selectHotel(document.getElementById('hotel').value);
+  if (data.hotels.length) selectHotel(data.hotels[0].id);
+}
+
+function selectHotel(id) {
+  currentHotel = data.hotels.find(h => h.id === id);
+  renderFloors();
+}
+
+function renderFloors() {
+  const sel = document.getElementById('floor-select');
+  if (!currentHotel) return;
+  sel.innerHTML = '<label>Floor</label><select id="floor">' +
+    currentHotel.floors.map(f => `<option value="${f.id}">Floor ${f.number}</option>`).join('') +
+    '</select>';
+  document.getElementById('floor').onchange = () => selectFloor(document.getElementById('floor').value);
+  if (currentHotel.floors.length) selectFloor(currentHotel.floors[0].id);
+}
+
+function selectFloor(id) {
+  currentFloor = currentHotel.floors.find(f => f.id === id);
+  loadFloor();
+}
+
+function loadFloor() {
+  if (!currentFloor) return;
+  planImg.src = currentFloor.planImage || '';
+  planImg.onload = () => { updateOverlaySize(); redrawAreas(); };
+  updateOverlaySize();
+  redrawAreas();
+  updateStats();
+}
+
+function updateOverlaySize() {
+  overlay.setAttribute('width', planImg.offsetWidth);
+  overlay.setAttribute('height', planImg.offsetHeight);
+  overlay.style.width = planImg.offsetWidth + 'px';
+  overlay.style.height = planImg.offsetHeight + 'px';
+}
+
+function redrawAreas() {
+  overlay.innerHTML = '';
+  if (!currentFloor || !planImg.offsetWidth) return;
+  currentFloor.areas.forEach(area => {
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    const pts = area.points.map(p => `${p[0] * planImg.offsetWidth},${p[1] * planImg.offsetHeight}`).join(' ');
+    poly.setAttribute('points', pts);
+    poly.classList.add('status-' + (area.status || 'available'));
+    poly.onclick = () => openModal(area);
+    overlay.appendChild(poly);
+
+    // simple label at centroid
+    if (area.points.length) {
+      const cx = area.points.reduce((s,p)=>s+p[0],0)/area.points.length * planImg.offsetWidth;
+      const cy = area.points.reduce((s,p)=>s+p[1],0)/area.points.length * planImg.offsetHeight;
+      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text.setAttribute('x', cx);
+      text.setAttribute('y', cy);
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('class', 'room-label');
+      text.textContent = area.roomNumber || '';
+      overlay.appendChild(text);
+    }
+  });
+}
+
+function openModal(area) {
+  const modal = document.getElementById('modal');
+  modal.style.display = 'block';
+  modal.innerHTML = `
+    <h3>Room ${area.roomNumber}</h3>
+    Status:<br>
+    <select id="status-sel">
+      ${['available','occupied','cleaning','maintenance'].map(s =>
+        `<option value="${s}" ${s===area.status?'selected':''}>${s}</option>`).join('')}
+    </select><br>
+    Beds: <input id="beds" value="${area.characteristics?.beds||''}"><br>
+    Capacity: <input id="cap" type="number" value="${area.characteristics?.capacity||2}"><br>
+    Notes: <textarea id="notes">${area.characteristics?.notes||''}</textarea><br>
+    <button onclick="saveModal('${area.id}')">Save</button>
+    <button onclick="document.getElementById('modal').style.display='none'">Close</button>
+  `;
+}
+
+function saveModal(id) {
+  const area = currentFloor.areas.find(a => a.id === id);
+  if (!area) return;
+  area.status = document.getElementById('status-sel').value;
+  area.characteristics = area.characteristics || {};
+  area.characteristics.beds = document.getElementById('beds').value;
+  area.characteristics.capacity = Number(document.getElementById('cap').value);
+  area.characteristics.notes = document.getElementById('notes').value;
+  saveData(data);
+  document.getElementById('modal').style.display = 'none';
+  redrawAreas();
+  updateStats();
+}
+
+function updateStats() {
+  if (!currentFloor) return;
+  const counts = { available:0, occupied:0, cleaning:0, maintenance:0 };
+  currentFloor.areas.forEach(a => { counts[a.status] = (counts[a.status]||0)+1; });
+  document.getElementById('stats').innerHTML =
+    `<strong>Rooms: ${currentFloor.areas.length}</strong><br>` +
+    Object.entries(counts).map(([k,v]) => `${k}: ${v}`).join('<br>');
+}
+
+window.addEventListener('resize', () => { updateOverlaySize(); redrawAreas(); });
+renderHotels();
+</script>
+</body>
+</html>
