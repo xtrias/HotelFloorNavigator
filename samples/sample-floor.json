@@ -1,0 +1,140 @@
+{
+  "floor": {
+    "number": 1,
+    "areas": [
+      {
+        "id": "r101",
+        "type": "room",
+        "label": "101",
+        "roomNumber": "101",
+        "points": [[0.08, 0.18], [0.18, 0.18], [0.18, 0.32], [0.08, 0.32]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r102",
+        "type": "room",
+        "label": "102",
+        "roomNumber": "102",
+        "points": [[0.19, 0.18], [0.29, 0.18], [0.29, 0.32], [0.19, 0.32]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r103",
+        "type": "room",
+        "label": "103",
+        "roomNumber": "103",
+        "points": [[0.30, 0.18], [0.40, 0.18], [0.40, 0.32], [0.30, 0.32]],
+        "status": "occupied",
+        "characteristics": {}
+      },
+      {
+        "id": "r104",
+        "type": "room",
+        "label": "104",
+        "roomNumber": "104",
+        "points": [[0.41, 0.18], [0.51, 0.18], [0.51, 0.32], [0.41, 0.32]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r105",
+        "type": "room",
+        "label": "105",
+        "roomNumber": "105",
+        "points": [[0.52, 0.18], [0.62, 0.18], [0.62, 0.32], [0.52, 0.32]],
+        "status": "cleaning",
+        "characteristics": {}
+      },
+      {
+        "id": "r106",
+        "type": "room",
+        "label": "106",
+        "roomNumber": "106",
+        "points": [[0.63, 0.18], [0.73, 0.18], [0.73, 0.32], [0.63, 0.32]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r107",
+        "type": "room",
+        "label": "107",
+        "roomNumber": "107",
+        "points": [[0.74, 0.18], [0.84, 0.18], [0.84, 0.32], [0.74, 0.32]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r108",
+        "type": "room",
+        "label": "108",
+        "roomNumber": "108",
+        "points": [[0.85, 0.18], [0.95, 0.18], [0.95, 0.32], [0.85, 0.32]],
+        "status": "maintenance",
+        "characteristics": {}
+      },
+      {
+        "id": "r201",
+        "type": "room",
+        "label": "201",
+        "roomNumber": "201",
+        "points": [[0.08, 0.38], [0.18, 0.38], [0.18, 0.52], [0.08, 0.52]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r202",
+        "type": "room",
+        "label": "202",
+        "roomNumber": "202",
+        "points": [[0.19, 0.38], [0.29, 0.38], [0.29, 0.52], [0.19, 0.52]],
+        "status": "occupied",
+        "characteristics": {}
+      },
+      {
+        "id": "r203",
+        "type": "room",
+        "label": "203",
+        "roomNumber": "203",
+        "points": [[0.30, 0.38], [0.40, 0.38], [0.40, 0.52], [0.30, 0.52]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r301",
+        "type": "room",
+        "label": "301",
+        "roomNumber": "301",
+        "points": [[0.42, 0.55], [0.55, 0.55], [0.55, 0.72], [0.42, 0.72]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "r302",
+        "type": "room",
+        "label": "302",
+        "roomNumber": "302",
+        "points": [[0.42, 0.73], [0.55, 0.73], [0.55, 0.90], [0.42, 0.90]],
+        "status": "cleaning",
+        "characteristics": {}
+      },
+      {
+        "id": "lobby",
+        "type": "lobby",
+        "label": "Lobby",
+        "points": [[0.58, 0.40], [0.95, 0.40], [0.95, 0.95], [0.58, 0.95]],
+        "status": "available",
+        "characteristics": {}
+      },
+      {
+        "id": "stairs1",
+        "type": "stairs",
+        "label": "Stairs",
+        "points": [[0.36, 0.12], [0.42, 0.12], [0.42, 0.18], [0.36, 0.18]],
+        "status": "available",
+        "characteristics": {}
+      }
+    ]
+  }
+}
