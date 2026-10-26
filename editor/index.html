@@ -13,7 +13,6 @@
   #overlay polygon, #overlay circle, #overlay polyline { pointer-events: all; }
   polygon { fill: rgba(52,152,219,0.35); stroke: #2980b9; stroke-width: 2; cursor: pointer; }
   polygon.selected { fill: rgba(231,76,60,0.4); stroke: #c0392b; }
-  polygon.drawing { fill: none; stroke: #e74c3c; stroke-dasharray: 4; }
   circle.handle { fill: #fff; stroke: #333; stroke-width: 2; cursor: move; }
   .zoom-controls { position: sticky; top: 0; background: #eee; padding: 6px; z-index: 5; }
   .zoom-controls button { width: auto; margin-right: 6px; padding: 4px 10px; }
@@ -99,6 +98,13 @@ canvasWrap.addEventListener('wheel', (e) => {
   }
 }, { passive: false });
 
+function getRelativePoint(e) {
+  const rect = planImg.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / rect.width;
+  const y = (e.clientY - rect.top) / rect.height;
+  return [Math.max(0, Math.min(1, x)), Math.max(0, Math.min(1, y))];
+}
+
 function renderHotels() {
   const sel = document.getElementById('hotel-select');
   sel.innerHTML = '<label>Hotel</label><select id="hotel">' +
@@ -154,7 +160,6 @@ function redraw() {
   const w = planImg.offsetWidth;
   const h = planImg.offsetHeight;
 
-  // Existing areas
   currentFloor.areas.forEach(area => {
     const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
     const pts = area.points.map(p => `${p[0]*w},${p[1]*h}`).join(' ');
@@ -166,7 +171,6 @@ function redraw() {
     poly.onclick = (e) => { e.stopPropagation(); selectArea(area.id); };
     overlay.appendChild(poly);
 
-    // Label
     if (area.points.length) {
       const cx = area.points.reduce((s,p)=>s+p[0],0)/area.points.length * w;
       const cy = area.points.reduce((s,p)=>s+p[1],0)/area.points.length * h;
@@ -181,7 +185,6 @@ function redraw() {
       overlay.appendChild(text);
     }
 
-    // Vertex handles if selected
     if (area.id === selectedAreaId) {
       area.points.forEach((p, idx) => {
         const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -198,7 +201,6 @@ function redraw() {
     }
   });
 
-  // Current drawing polyline
   if (drawing && currentPoints.length) {
     const pl = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
     const pts = currentPoints.map(p => `${p[0]*w},${p[1]*h}`).join(' ');
@@ -217,37 +219,15 @@ function redraw() {
   }
 }
 
-// Drawing clicks
+// Single clean click handler for drawing
 planImg.addEventListener('click', (e) => {
   if (!drawing) return;
-  const rect = planImg.getBoundingClientRect();
-  const x = (e.clientX - rect.left) / (planImg.offsetWidth * zoom);
-  const y = (e.clientY - rect.top) / (planImg.offsetHeight * zoom);
-  // Because of CSS transform on parent, client coords need adjustment
-  // Better: use offset relative to image after transform
-  currentPoints.push([x, y]);
-  redraw();
-  document.getElementById('finish-poly').disabled = currentPoints.length < 3;
-});
-
-// Fix coordinate calculation with transform
-function getRelativePoint(e) {
-  const rect = planImg.getBoundingClientRect();
-  const x = (e.clientX - rect.left) / rect.width;
-  const y = (e.clientY - rect.top) / rect.height;
-  return [Math.max(0, Math.min(1, x)), Math.max(0, Math.min(1, y))];
-}
-
-planImg.addEventListener('click', (e) => {
-  if (!drawing) return;
+  e.stopPropagation();
   const [x, y] = getRelativePoint(e);
   currentPoints.push([x, y]);
   redraw();
   document.getElementById('finish-poly').disabled = currentPoints.length < 3;
 });
-
-// Remove the previous broken listener by redefining
-planImg.onclick = null;
 
 document.getElementById('start-draw').onclick = () => {
   drawing = true;
@@ -286,7 +266,6 @@ document.getElementById('cancel-poly').onclick = () => {
   redraw();
 };
 
-// Drag vertices
 window.addEventListener('mousemove', (e) => {
   if (!draggingPoint) return;
   const [x, y] = getRelativePoint(e);
