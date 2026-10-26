@@ -59,6 +59,8 @@
   <hr>
   <button onclick="location.href='../config/'">Configure area types & colors</button>
   <button onclick="exportFloorJson()">Export this floor (JSON)</button>
+  <label>Import floor JSON</label>
+  <input type="file" id="json-import" accept=".json,application/json">
   <button id="save-all">Save everything</button>
   <button onclick="location.href='../navigator/'">Open Navigator</button>
 </div>
@@ -376,6 +378,41 @@ function exportFloorJson() {
   a.download = `floor-${currentFloor.number || currentFloor.id}.json`;
   a.click();
 }
+
+document.getElementById('json-import').onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file || !currentFloor) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const imported = JSON.parse(reader.result);
+      const areas = imported.floor?.areas || imported.areas || [];
+      if (!areas.length) {
+        alert('No areas found in JSON');
+        return;
+      }
+      if (confirm(`Import ${areas.length} areas into the current floor? Existing areas will be replaced.`)) {
+        currentFloor.areas = areas.map(a => ({
+          id: a.id || generateId(),
+          type: a.type || 'room',
+          label: a.label || a.roomNumber || '',
+          roomNumber: a.roomNumber || a.label || '',
+          points: a.points || [],
+          status: a.status || 'available',
+          characteristics: a.characteristics || {}
+        }));
+        saveData(data);
+        redraw();
+        renderAreasList();
+        alert('Imported');
+      }
+    } catch (err) {
+      alert('Invalid JSON: ' + err.message);
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+};
 
 document.getElementById('image-upload').onchange = (e) => {
   const file = e.target.files[0];
