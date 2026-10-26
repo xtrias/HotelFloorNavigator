@@ -12,7 +12,7 @@
   #overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
   #overlay polygon, #overlay circle, #overlay polyline { pointer-events: all; }
   polygon { fill: rgba(52,152,219,0.35); stroke: #2980b9; stroke-width: 2; cursor: pointer; }
-  polygon.selected { fill: rgba(231,76,60,0.4); stroke: #c0392b; }
+  polygon.selected { fill: rgba(231,76,60,0.4); stroke: #c0392b; cursor: move; }
   circle.handle { fill: #fff; stroke: #333; stroke-width: 2; cursor: move; }
   .zoom-controls { position: sticky; top: 0; background: #eee; padding: 6px; z-index: 5; }
   .zoom-controls button { width: auto; margin-right: 6px; padding: 4px 10px; }
@@ -80,6 +80,7 @@ let currentPoints = [];
 let selectedAreaId = null;
 let zoom = 1;
 let draggingPoint = null;
+let draggingArea = null;
 
 const planImg = document.getElementById('plan');
 const overlay = document.getElementById('overlay');
@@ -172,6 +173,17 @@ function redraw() {
     poly.style.stroke = t.color;
     if (area.id === selectedAreaId) poly.classList.add('selected');
     poly.onclick = (e) => { e.stopPropagation(); selectArea(area.id); };
+    poly.onmousedown = (e) => {
+      if (area.id !== selectedAreaId) return;
+      e.stopPropagation();
+      const [x, y] = getRelativePoint(e);
+      draggingArea = {
+        areaId: area.id,
+        startX: x,
+        startY: y,
+        origPoints: area.points.map(p => [p[0], p[1]])
+      };
+    };
     overlay.appendChild(poly);
 
     if (area.points.length) {
@@ -198,6 +210,7 @@ function redraw() {
         c.onmousedown = (e) => {
           e.stopPropagation();
           draggingPoint = { areaId: area.id, idx };
+          draggingArea = null;
         };
         overlay.appendChild(c);
       });
@@ -284,18 +297,32 @@ document.getElementById('cancel-poly').onclick = () => {
 };
 
 window.addEventListener('mousemove', (e) => {
-  if (!draggingPoint) return;
-  const [x, y] = getRelativePoint(e);
-  const area = currentFloor.areas.find(a => a.id === draggingPoint.areaId);
-  if (area) {
-    area.points[draggingPoint.idx] = [x, y];
-    redraw();
+  if (draggingPoint) {
+    const [x, y] = getRelativePoint(e);
+    const area = currentFloor.areas.find(a => a.id === draggingPoint.areaId);
+    if (area) {
+      area.points[draggingPoint.idx] = [x, y];
+      redraw();
+    }
+  } else if (draggingArea) {
+    const [x, y] = getRelativePoint(e);
+    const dx = x - draggingArea.startX;
+    const dy = y - draggingArea.startY;
+    const area = currentFloor.areas.find(a => a.id === draggingArea.areaId);
+    if (area) {
+      area.points = draggingArea.origPoints.map(p => [
+        Math.max(0, Math.min(1, p[0] + dx)),
+        Math.max(0, Math.min(1, p[1] + dy))
+      ]);
+      redraw();
+    }
   }
 });
 window.addEventListener('mouseup', () => {
-  if (draggingPoint) {
+  if (draggingPoint || draggingArea) {
     saveData(data);
     draggingPoint = null;
+    draggingArea = null;
   }
 });
 
