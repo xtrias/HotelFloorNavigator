@@ -19,9 +19,6 @@
   button, input, select, textarea { margin: 4px 0; width: 100%; box-sizing: border-box; }
   .area-item { background: white; margin: 4px 0; padding: 6px; border-radius: 4px; font-size: 13px; cursor: pointer; }
   .area-item:hover { background: #e8f4fd; }
-  #type-config { font-size: 13px; }
-  .type-row { display: flex; gap: 4px; margin: 2px 0; }
-  .type-row input { flex: 1; }
   #new-area-form { background: #fff; padding: 8px; border: 1px solid #ccc; border-radius: 6px; margin: 8px 0; display: none; }
   #new-area-form label { font-size: 13px; }
 </style>
@@ -60,13 +57,7 @@
   <h4>Areas on this floor</h4>
   <div id="areas-list"></div>
   <hr>
-  <details>
-    <summary><strong>Configure area types</strong></summary>
-    <div id="type-config"></div>
-    <button onclick="addAreaType()">+ Add type</button>
-    <button onclick="saveTypes()">Save types</button>
-  </details>
-  <hr>
+  <button onclick="location.href='../config/'">Configure area types & colors</button>
   <button onclick="exportFloorJson()">Export this floor (JSON)</button>
   <button id="save-all">Save everything</button>
   <button onclick="location.href='../navigator/'">Open Navigator</button>
@@ -151,7 +142,6 @@ function loadFloor() {
   planImg.onload = () => updateOverlay();
   updateOverlay();
   renderAreasList();
-  renderTypeConfig();
 }
 
 function updateOverlay() {
@@ -250,7 +240,6 @@ document.getElementById('start-draw').onclick = () => {
 
 document.getElementById('finish-poly').onclick = () => {
   if (currentPoints.length < 3) return;
-  // Show form with dropdown instead of prompt
   const sel = document.getElementById('new-type');
   sel.innerHTML = data.areaTypes.map(t => `<option value="${t.id}">${t.label}</option>`).join('');
   document.getElementById('new-label').value = '';
@@ -366,28 +355,6 @@ function renderAreasList() {
     const t = getAreaType(data, a.type);
     return `<div class="area-item" onclick="selectArea('${a.id}')" style="border-left:4px solid ${t.color}">${a.label||a.roomNumber||'(no label)'} — ${t.label}</div>`;
   }).join('') || '<em>No areas yet</em>';
-}
-
-function renderTypeConfig() {
-  const el = document.getElementById('type-config');
-  el.innerHTML = data.areaTypes.map((t, i) => `
-    <div class="type-row">
-      <input value="${t.label}" onchange="data.areaTypes[${i}].label=this.value">
-      <input type="color" value="${t.color}" onchange="data.areaTypes[${i}].color=this.value" style="width:40px">
-      <button onclick="data.areaTypes.splice(${i},1); renderTypeConfig();" style="width:auto">×</button>
-    </div>
-  `).join('');
-}
-function addAreaType() {
-  const label = prompt('Type name?');
-  if (!label) return;
-  data.areaTypes.push({ id: label.toLowerCase().replace(/\s+/g,'_'), label, color: '#7f8c8d' });
-  renderTypeConfig();
-}
-function saveTypes() {
-  saveData(data);
-  alert('Area types saved');
-  redraw();
 }
 
 function exportFloorJson() {
